@@ -57,7 +57,7 @@ function App() {
           <span className="block sm:inline text-slate-400">Soru Kırpma ve Deneme Oluşturma Sistemi</span>
         </div>
         <div className="text-slate-400">
-          İletişim: <a href="mailto:iletisim@mehmetparlakiho.meb.k12.tr" className="hover:text-white transition-colors">iletisim@mehmetparlakiho.meb.k12.tr</a>
+          İletişim: <a href="mailto:bsckbilgi@gmail.com" className="hover:text-white transition-colors">bsckbilgi@gmail.com</a>
         </div>
       </footer>
     </div>
