@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { PDFViewer } from './components/PDFViewer';
 import { Sidebar } from './components/Sidebar';
 import { useStore } from './store/useStore';

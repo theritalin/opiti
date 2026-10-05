@@ -109,7 +109,7 @@ export const PDFViewer: React.FC = () => {
         canvas.height = viewport.height;
         canvas.width = viewport.width;
         
-        const renderContext = {
+        const renderContext: any = {
           canvasContext: context,
           viewport: viewport,
         };
