@@ -2,10 +2,17 @@ import { useEffect, useState } from 'react';
 import { PDFViewer } from './components/PDFViewer';
 import { Sidebar } from './components/Sidebar';
 import { useStore } from './store/useStore';
-import { ShoppingCart, ChevronDown } from 'lucide-react';
+import { ShoppingCart, ChevronDown, X, FileText, Download } from 'lucide-react';
+
+const formatSize = (bytes?: number) => {
+  if (!bytes) return 'Bilinmiyor';
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(0) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+};
 
 function App() {
-  const { loadFromStorage, questions } = useStore();
+  const { loadFromStorage, questions, previewData, setPreviewData } = useStore();
   const [isCartOpen, setIsCartOpen] = useState(false);
 
   useEffect(() => {
@@ -60,6 +67,66 @@ function App() {
           İletişim: <a href="mailto:bsckbilgi@gmail.com" className="hover:text-white transition-colors">bsckbilgi@gmail.com</a>
         </div>
       </footer>
+
+      {/* Önizleme Modalı (DOKÜMANLAR) */}
+      {previewData && (
+        <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 sm:p-8">
+          <div className="bg-white w-full max-w-6xl h-[90vh] rounded-xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            
+            {/* Modal Header */}
+            <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50 shrink-0 relative">
+              <h3 className="font-bold text-slate-800 text-lg text-center w-full">
+                DOKÜMANLAR
+              </h3>
+              <button 
+                onClick={() => setPreviewData(null)} 
+                className="absolute right-4 p-2 hover:bg-slate-200 text-slate-500 hover:text-slate-700 rounded-full transition-colors"
+                title="Kapat"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            {/* Modal Body: Split Layout */}
+            <div className="flex-1 flex flex-col md:flex-row overflow-hidden bg-slate-100">
+              
+              {/* Left Column: PDF Preview */}
+              <div className="flex-[2] border-r border-slate-200 p-4 relative h-full">
+                 <iframe 
+                   src={previewData.url} 
+                   className="w-full h-full border-0 bg-white rounded shadow-sm" 
+                   title="PDF Önizleme" 
+                 />
+              </div>
+              
+              {/* Right Column: Document List */}
+              <div className="flex-1 bg-white p-6 flex flex-col overflow-y-auto">
+                 <div className="flex items-start gap-4 p-4 border border-slate-200 rounded-lg hover:border-indigo-300 transition-colors bg-slate-50">
+                    <FileText className="w-8 h-8 text-red-500 shrink-0 mt-1" />
+                    <div className="flex-1">
+                       <h4 className="font-bold text-slate-800 text-sm mb-2">{previewData.title.toUpperCase()}</h4>
+                       <div className="flex gap-4 text-xs text-slate-500 mb-4">
+                          <span>Sayfa: {previewData.pages || 1}</span>
+                          <span>Boyut: {formatSize(previewData.sizeBytes)}</span>
+                       </div>
+                       
+                       <a 
+                         href={previewData.url}
+                         download={`${previewData.title}.pdf`}
+                         className="inline-flex items-center gap-1.5 text-sm font-semibold text-indigo-600 hover:text-indigo-800"
+                       >
+                         <Download className="w-4 h-4" />
+                         İndir
+                       </a>
+                    </div>
+                 </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

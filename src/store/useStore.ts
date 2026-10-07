@@ -22,16 +22,19 @@ interface StoreState {
   pdfs: PdfDocument[];
   activePdfId: string | null;
   questions: Question[];
-  pageLayouts: Record<number, '1-col' | '2-col'>;
+  globalLayout: '1-col' | '2-col';
+  bookletFormat: 'A' | 'A-B';
+  previewData: { url: string; title: string; pages?: number; sizeBytes?: number } | null;
   
   addPdf: (pdf: PdfDocument) => void;
   setActivePdfId: (id: string | null) => void;
-  addQuestion: (question: Question) => void;
+  setPreviewData: (data: { url: string; title: string; pages?: number; sizeBytes?: number } | null) => void;
   removeQuestion: (id: string) => void;
   updateQuestionAnswer: (id: string, answer: string) => void;
   reorderQuestions: (startIndex: number, endIndex: number) => void;
   
-  setPageLayout: (pageIndex: number, layout: '1-col' | '2-col') => void;
+  setGlobalLayout: (layout: '1-col' | '2-col') => void;
+  setBookletFormat: (format: 'A' | 'A-B') => void;
   clearAll: () => void;
   
   // Persistence
@@ -43,10 +46,13 @@ export const useStore = create<StoreState>((set, get) => ({
   pdfs: [],
   activePdfId: null,
   questions: [],
-  pageLayouts: {},
+  globalLayout: '2-col',
+  bookletFormat: 'A',
+  previewData: null,
   
   addPdf: (pdf) => set((state) => ({ pdfs: [...state.pdfs, pdf], activePdfId: pdf.id })),
   setActivePdfId: (id) => set({ activePdfId: id }),
+  setPreviewData: (data) => set({ previewData: data }),
   
   addQuestion: (question) => {
     set((state) => ({ questions: [...state.questions, question] }));
@@ -75,37 +81,43 @@ export const useStore = create<StoreState>((set, get) => ({
     get().saveToStorage();
   },
 
-  setPageLayout: (pageIndex, layout) => {
-    set((state) => ({
-      pageLayouts: { ...state.pageLayouts, [pageIndex]: layout }
-    }));
+  setGlobalLayout: (layout) => {
+    set({ globalLayout: layout });
+    get().saveToStorage();
+  },
+  
+  setBookletFormat: (format) => {
+    set({ bookletFormat: format });
     get().saveToStorage();
   },
   
   clearAll: () => {
-    set({ questions: [], pageLayouts: {} });
+    set({ questions: [] });
     get().saveToStorage();
   },
   
   saveToStorage: async () => {
-    const { questions, pageLayouts } = get();
+    const { questions, globalLayout, bookletFormat } = get();
     await localforage.setItem('questions', questions);
-    await localforage.setItem('pageLayouts', pageLayouts);
+    await localforage.setItem('globalLayout', globalLayout);
+    await localforage.setItem('bookletFormat', bookletFormat);
   },
   loadFromStorage: async () => {
     const questions = await localforage.getItem<Question[]>('questions');
-    const pageLayouts = await localforage.getItem<Record<number, '1-col'|'2-col'>>('pageLayouts');
+    const globalLayout = await localforage.getItem<'1-col'|'2-col'>('globalLayout');
+    const bookletFormat = await localforage.getItem<'A'|'A-B'>('bookletFormat');
     
     // Fallback logic for old `pages` migration
     const pages = await localforage.getItem<any[]>('pages');
     if (pages && (!questions || questions.length === 0)) {
        const flatQuestions = pages.flatMap(p => p.questions);
-       set({ questions: flatQuestions, pageLayouts: pageLayouts || {} });
+       set({ questions: flatQuestions, globalLayout: globalLayout || '2-col' });
        await localforage.removeItem('pages');
     } else {
        set({ 
          questions: questions || [], 
-         pageLayouts: pageLayouts || {} 
+         globalLayout: globalLayout || '2-col',
+         bookletFormat: bookletFormat || 'A'
        });
     }
   }

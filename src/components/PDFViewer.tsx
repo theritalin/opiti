@@ -23,6 +23,7 @@ export const PDFViewer: React.FC = () => {
   const [isRendering, setIsRendering] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedAnswer, setSelectedAnswer] = useState<string>('');
 
   const handleFiles = (files: FileList) => {
     setError(null);
@@ -169,12 +170,13 @@ export const PDFViewer: React.FC = () => {
       imageDataUrl: base64Image,
       width: canvas.width,
       height: canvas.height,
-      answer: '',
+      answer: selectedAnswer,
       createdAt: Date.now()
     });
     
     setCrop(undefined);
     setCompletedCrop(undefined);
+    setSelectedAnswer('');
   };
 
   return (
@@ -264,15 +266,6 @@ export const PDFViewer: React.FC = () => {
                 <ChevronRight className="w-5 h-5" />
               </button>
             </div>
-            
-            <button 
-              onClick={saveCroppedQuestion}
-              disabled={!completedCrop?.width || !completedCrop?.height}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto"
-            >
-              <Scissors className="w-4 h-4 shrink-0" />
-              Kırp ve Sepete Ekle
-            </button>
           </div>
         )}
       </div>
@@ -320,6 +313,32 @@ export const PDFViewer: React.FC = () => {
                   draggable={false}
                 />
               </ReactCrop>
+
+              {completedCrop && completedCrop.width > 0 && completedCrop.height > 0 && (
+                <div 
+                  className="absolute z-50 flex items-center gap-1 bg-white p-1 rounded shadow-lg border border-slate-200"
+                  style={{
+                    top: `${completedCrop.y + completedCrop.height + 10}px`,
+                    left: `${Math.max(0, completedCrop.x + completedCrop.width - 240)}px`
+                  }}
+                >
+                  {['A', 'B', 'C', 'D', 'E'].map(ans => (
+                    <button
+                      key={ans}
+                      onClick={() => setSelectedAnswer(ans)}
+                      className={`w-8 h-8 rounded flex items-center justify-center font-bold text-sm transition-colors ${selectedAnswer === ans ? 'bg-yellow-400 text-slate-800' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'}`}
+                    >
+                      {ans}
+                    </button>
+                  ))}
+                  <button 
+                    onClick={saveCroppedQuestion}
+                    className="ml-2 bg-blue-500 hover:bg-blue-600 text-white font-bold text-sm py-1.5 px-4 rounded transition-colors"
+                  >
+                    Tamam
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         ) : null}

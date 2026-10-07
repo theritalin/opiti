@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useStore } from '../store/useStore';
-import { Trash2, FileText, CheckCircle2, GripVertical, LayoutTemplate, Layout, Eye, Download, X } from 'lucide-react';
+import { Trash2, FileText, CheckCircle2, GripVertical, LayoutTemplate, Layout, Eye, Download, X, Columns } from 'lucide-react';
 import jsPDF from 'jspdf';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 
@@ -10,87 +10,22 @@ export const Sidebar: React.FC<{ onClose?: () => void }> = ({ onClose }) => {
     pageLayouts,
     removeQuestion, 
     updateQuestionAnswer, 
-    setPageLayout, 
-    reorderQuestions 
+    reorderQuestions,
+    setPreviewData,
+    globalLayout,
+    setGlobalLayout,
+    bookletFormat,
+    setBookletFormat
   } = useStore();
   
   const [testTitle, setTestTitle] = useState('Deneme Sınavı 1');
   const [isGenerating, setIsGenerating] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
-  const computedPages = useMemo(() => {
-    const pages = [];
-    let currentPageIndex = 0;
-    let currentLayout = pageLayouts[0] || '1-col';
-    let currentQuestions: typeof questions = [];
-    
-    let yOffset = 35; 
-    let currentColumn = 1;
-
-    for (const q of questions) {
-      const maxWidth = currentLayout === '2-col' ? 85 : 170;
-      
-      const qWidth = q.width || 800;
-      const qHeight = q.height || 400;
-      
-      const imgRatio = qHeight / qWidth;
-      const finalWidth = Math.min(qWidth * 0.264583, maxWidth);
-      const finalHeight = finalWidth * imgRatio;
-
-      if (yOffset + finalHeight > 280) {
-        if (currentLayout === '2-col' && currentColumn === 1) {
-          currentColumn = 2;
-          yOffset = 35;
-        } else {
-          pages.push({ pageIndex: currentPageIndex, layout: currentLayout, questions: currentQuestions });
-          currentPageIndex++;
-          currentLayout = pageLayouts[currentPageIndex] || '1-col';
-          currentQuestions = [];
-          currentColumn = 1;
-          yOffset = 35;
-        }
-      }
-      
-      currentQuestions.push(q);
-      yOffset += finalHeight + 10;
-    }
-    
-    if (currentQuestions.length > 0) {
-      pages.push({ pageIndex: currentPageIndex, layout: currentLayout, questions: currentQuestions });
-    }
-    
-    if (pages.length === 0) {
-      pages.push({ pageIndex: 0, layout: pageLayouts[0] || '1-col', questions: [] });
-    }
-    
-    return pages;
-  }, [questions, pageLayouts]);
+  // Computed pages are removed for UI. We render a single list.
 
   const onDragEnd = (result: DropResult) => {
     if (!result.destination) return;
-    
-    const sourcePageStr = result.source.droppableId.split('-')[1];
-    const destPageStr = result.destination.droppableId.split('-')[1];
-    const sourcePageIndex = parseInt(sourcePageStr);
-    const destPageIndex = parseInt(destPageStr);
-    
-    let flatSourceIndex = 0;
-    for (let i = 0; i < sourcePageIndex; i++) {
-      flatSourceIndex += computedPages[i].questions.length;
-    }
-    flatSourceIndex += result.source.index;
-    
-    let flatDestIndex = 0;
-    for (let i = 0; i < destPageIndex; i++) {
-      flatDestIndex += computedPages[i].questions.length;
-    }
-    flatDestIndex += result.destination.index;
-    
-    if (flatDestIndex >= questions.length) {
-      flatDestIndex = questions.length - 1;
-    }
-
-    reorderQuestions(flatSourceIndex, flatDestIndex);
+    reorderQuestions(result.source.index, result.destination.index);
   };
 
   const generateTestPDF = async (isPreview = false) => {
@@ -120,104 +55,169 @@ export const Sidebar: React.FC<{ onClose?: () => void }> = ({ onClose }) => {
       if (fontBase64) {
         doc.addFileToVFS('Roboto-Regular.ttf', fontBase64);
         doc.addFont('Roboto-Regular.ttf', 'Roboto', 'normal');
-        doc.setFont('Roboto');
+        doc.addFont('Roboto-Regular.ttf', 'Roboto', 'bold');
       }
 
-      let qNum = 1;
-      let isFirstPage = true;
+      const drawPageBase = (doc: jsPDF, pageIdx: number, bookletTitle: string) => {
+        if (fontBase64) doc.setFont('Roboto');
+        
+        doc.setDrawColor(249, 115, 22);
+        doc.setLineWidth(0.5);
+        
+        doc.roundedRect(15, 10, 180, 20, 3, 3);
+        doc.line(15, 20, 195, 20);
+        
+        doc.setFillColor(249, 115, 22);
+        doc.roundedRect(70, 11, 70, 8, 4, 4, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(10);
+        if (fontBase64) doc.setFont('Roboto', 'bold');
+        doc.text(bookletTitle.toUpperCase(), 105, 16.5, { align: 'center' });
+        
+        doc.setDrawColor(253, 186, 116);
+        doc.line(105, 35, 105, 280);
+        
+        doc.setDrawColor(249, 115, 22);
+        doc.setFillColor(255, 255, 255);
+        doc.circle(105, 287, 4, 'FD');
+        doc.setTextColor(0, 0, 0);
+        doc.text(pageIdx.toString(), 105, 288.5, { align: 'center' });
+      };
 
-      for (let pIdx = 0; pIdx < computedPages.length; pIdx++) {
-        const pageConfig = computedPages[pIdx];
-        if (pageConfig.questions.length === 0) continue;
-
-        if (!isFirstPage) {
-          doc.addPage();
-          if (fontBase64) doc.setFont('Roboto');
+      const renderBooklet = async (doc: jsPDF, bookletQuestions: typeof questions, bookletTitle: string, isFirst: boolean) => {
+        let pageNum = 1;
+        if (!isFirst) {
+           doc.addPage();
         }
-        isFirstPage = false;
+        drawPageBase(doc, pageNum, bookletTitle);
 
-        let yOffset = 20;
-        doc.setFontSize(16);
-        doc.text(testTitle, 105, yOffset, { align: 'center' });
-        yOffset += 15;
+        let qNum = 1;
+        let yOffsetLeft = 35;
+        let yOffsetRight = 35;
 
-        const isTwoColumn = pageConfig.layout === '2-col';
-        let currentColumn = 1; 
-
-        for (const q of pageConfig.questions) {
+        for (const q of bookletQuestions) {
           const img = new Image();
           img.src = q.imageDataUrl;
           await new Promise((resolve) => (img.onload = resolve));
           
-          const maxWidth = isTwoColumn ? 85 : 170;
+          const naturalWidth = img.width * 0.264583;
+          const isWide = globalLayout === '1-col';
+          
+          let targetYOffset = 35;
+          let currentColumn = 1;
+
+          if (isWide) {
+             targetYOffset = Math.max(yOffsetLeft, yOffsetRight);
+             currentColumn = 1;
+          } else {
+             if (yOffsetLeft <= yOffsetRight) {
+               currentColumn = 1;
+               targetYOffset = yOffsetLeft;
+             } else {
+               currentColumn = 2;
+               targetYOffset = yOffsetRight;
+             }
+          }
+
+          const maxWidth = isWide ? 175 : 80;
           const imgRatio = img.height / img.width;
-          let finalWidth = Math.min(img.width * 0.264583, maxWidth); 
+          let finalWidth = Math.min(naturalWidth, maxWidth); 
           let finalHeight = finalWidth * imgRatio;
 
-          const checkPageBreak = () => {
-            if (yOffset + finalHeight > 280) {
-              if (isTwoColumn && currentColumn === 1) {
-                currentColumn = 2;
-                yOffset = 35;
-              } else {
-                doc.addPage();
-                currentColumn = 1;
-                yOffset = 20;
-                doc.setFontSize(16);
-                doc.text(testTitle, 105, yOffset, { align: 'center' });
-                yOffset += 15;
-                if (fontBase64) doc.setFont('Roboto');
-              }
+          if (targetYOffset + finalHeight > 275) {
+            if (!isWide && currentColumn === 1 && yOffsetRight + finalHeight <= 275) {
+              currentColumn = 2;
+              targetYOffset = yOffsetRight;
+            } else if (!isWide && currentColumn === 2 && yOffsetLeft + finalHeight <= 275) {
+              currentColumn = 1;
+              targetYOffset = yOffsetLeft;
+            } else {
+              doc.addPage();
+              pageNum++;
+              drawPageBase(doc, pageNum, bookletTitle);
+              currentColumn = 1;
+              targetYOffset = 35;
+              yOffsetLeft = 35;
+              yOffsetRight = 35;
             }
-          };
+          }
 
-          checkPageBreak();
-
-          const xOffset = isTwoColumn ? (currentColumn === 1 ? 15 : 110) : 25;
-          const qNumX = isTwoColumn ? (currentColumn === 1 ? 8 : 103) : 15;
-
-          doc.setFontSize(12);
-          doc.text(`${qNum}.`, qNumX, yOffset + 5);
+          const xBase = currentColumn === 1 ? 15 : 110;
+          let xImage = xBase + 7;
           
-          doc.addImage(q.imageDataUrl, 'PNG', xOffset, yOffset, finalWidth, finalHeight);
+          if (isWide) {
+             xImage = 22 + (175 - finalWidth) / 2;
+          }
           
-          yOffset += finalHeight + 10;
+          doc.setFontSize(10);
+          if (fontBase64) doc.setFont('Roboto', 'bold');
+          doc.text(`${qNum}.`, xBase, targetYOffset + 4);
+          
+          doc.addImage(q.imageDataUrl, 'PNG', xImage, targetYOffset, finalWidth, finalHeight);
+          
+          const nextY = targetYOffset + finalHeight + 10;
+          if (isWide) {
+             yOffsetLeft = nextY;
+             yOffsetRight = nextY;
+          } else {
+             if (currentColumn === 1) yOffsetLeft = nextY;
+             else yOffsetRight = nextY;
+          }
           qNum++;
         }
-      }
-      
-      
+        
+        doc.addPage();
+        if (fontBase64) doc.setFont('Roboto', 'bold');
+        doc.setFontSize(16);
+        const titleSuffix = bookletFormat === 'A-B' ? ` - ${bookletTitle}` : '';
+        doc.text("CEVAP ANAHTARI" + titleSuffix, 105, 20, { align: 'center' });
+        doc.setFontSize(12);
+        
+        let keyY = 40;
+        let keyNum = 1;
+        let keyCol = 1;
+        
+        for (const q of bookletQuestions) {
+           let x = 20 + (keyCol - 1) * 45;
+           doc.text(`${keyNum} - ${q.answer || '?' }`, x, keyY);
+           keyY += 8;
+           keyNum++;
+           
+           if (keyY > 280) {
+              if (keyCol < 4) {
+                 keyCol++;
+                 keyY = 40;
+              } else {
+                 doc.addPage();
+                 keyCol = 1;
+                 keyY = 40;
+                 if (fontBase64) doc.setFont('Roboto', 'bold');
+                 doc.text("CEVAP ANAHTARI" + titleSuffix, 105, 20, { align: 'center' });
+                 if (fontBase64) doc.setFont('Roboto', 'normal');
+              }
+           }
+        }
+      };
 
-      const keyDoc = new jsPDF();
-      if (fontBase64) {
-        keyDoc.addFileToVFS('Roboto-Regular.ttf', fontBase64);
-        keyDoc.addFont('Roboto-Regular.ttf', 'Roboto', 'normal');
-        keyDoc.setFont('Roboto');
+      if (bookletFormat === 'A-B') {
+        await renderBooklet(doc, questions, `${testTitle} - A KİTAPÇIĞI`, true);
+        const shuffledQuestions = [...questions].sort(() => Math.random() - 0.5);
+        await renderBooklet(doc, shuffledQuestions, `${testTitle} - B KİTAPÇIĞI`, false);
+      } else {
+        await renderBooklet(doc, questions, testTitle, true);
       }
-      keyDoc.setFontSize(16);
-      keyDoc.text(`${testTitle} - Cevap Anahtarı`, 105, 20, { align: 'center' });
-      keyDoc.setFontSize(12);
-      
-      let keyY = 40;
-      let keyNum = 1;
-      computedPages.forEach(p => {
-        p.questions.forEach(q => {
-          keyDoc.text(`${keyNum} - ${q.answer || '?' }`, 20, keyY);
-          keyY += 10;
-          keyNum++;
-          if (keyY > 280) {
-            keyDoc.addPage();
-            keyY = 20;
-          }
-        });
-      });
       
       if (isPreview) {
-        const testBlobUrl = doc.output('bloburl');
-        setPreviewUrl(testBlobUrl.toString());
+        const testBlob = doc.output('blob');
+        const testBlobUrl = URL.createObjectURL(testBlob);
+        setPreviewData({ 
+           url: testBlobUrl, 
+           title: testTitle,
+           pages: doc.internal.getNumberOfPages(),
+           sizeBytes: testBlob.size
+        });
       } else {
         doc.save(`${testTitle}.pdf`);
-        keyDoc.save(`${testTitle}_CevapAnahtari.pdf`);
       }
 
     } catch(err) {
@@ -249,97 +249,105 @@ export const Sidebar: React.FC<{ onClose?: () => void }> = ({ onClose }) => {
         )}
       </div>
 
-      <div className="flex-1 overflow-x-auto overflow-y-hidden p-6">
+      <div className="flex-1 overflow-x-hidden overflow-y-auto p-6 bg-slate-200/50">
         <DragDropContext onDragEnd={onDragEnd}>
-          <div className="flex h-full gap-6 items-start pb-4 w-max">
-          {computedPages.map((page) => (
-            <div key={`page-${page.pageIndex}`} className="w-[320px] sm:w-[380px] shrink-0 max-h-full flex flex-col bg-white border border-slate-200 rounded-xl shadow-md relative">
-              <div className="bg-slate-100 p-3 flex justify-between items-center border-b border-slate-200 rounded-t-xl">
-                <h3 className="font-bold text-slate-700">Sayfa {page.pageIndex + 1}</h3>
-                <div className="flex items-center gap-2">
-                  <button 
-                    onClick={() => setPageLayout(page.pageIndex, page.layout === '1-col' ? '2-col' : '1-col')}
-                    className="flex items-center gap-1 text-xs font-medium px-2 py-1 bg-white border border-slate-300 rounded hover:bg-slate-50 text-slate-600 transition-colors"
-                    title="Bu sayfa için düzeni değiştir"
-                  >
-                    {page.layout === '1-col' ? <Layout className="w-3 h-3" /> : <LayoutTemplate className="w-3 h-3" />}
-                    {page.layout === '1-col' ? 'Tek Sütun' : 'İki Sütun'}
-                  </button>
-                </div>
-              </div>
-              
-              <Droppable droppableId={`page-${page.pageIndex}`}>
-                {(provided, snapshot) => (
-                  <div 
-                    ref={provided.innerRef} 
-                    {...provided.droppableProps} 
-                    className={`p-4 space-y-4 flex-1 overflow-y-auto min-h-[150px] transition-colors ${snapshot.isDraggingOver ? 'bg-indigo-50/50' : ''}`}
-                  >
-                    {page.questions.length === 0 ? (
-                      <div className="text-center text-slate-400 py-6 text-sm border-2 border-dashed border-slate-200 rounded-lg">
-                        PDF'den soru kırparak eklemeye başlayın.
-                      </div>
-                    ) : (
-                      page.questions.map((q, qIdx) => (
-                        <Draggable key={q.id} draggableId={q.id} index={qIdx}>
-                          {(provided, snapshot) => (
-                            <div 
-                              ref={provided.innerRef} 
-                              {...provided.draggableProps}
-                              className={`bg-white border border-slate-200 rounded-lg p-3 group transition-all ${snapshot.isDragging ? 'shadow-xl ring-2 ring-indigo-500 z-50 rotate-1' : 'hover:shadow-md'}`}
-                            >
-                              <div className="flex justify-between items-start mb-2">
-                                <div className="flex items-center gap-2 text-slate-500">
-                                  <div {...provided.dragHandleProps} className="cursor-grab active:cursor-grabbing p-1 -ml-1 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors text-slate-400">
-                                    <GripVertical className="w-4 h-4" />
-                                  </div>
-                                  <span className="font-semibold text-slate-700 text-sm">Soru</span>
-                                </div>
-                                <button 
-                                  onClick={() => removeQuestion(q.id)}
-                                  className="text-slate-300 hover:text-red-500 transition-colors"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                              </div>
-                              <img src={q.imageDataUrl} className="w-full h-auto border border-slate-100 rounded mb-3 bg-slate-50 object-contain max-h-40" />
-                              <div className="flex items-center gap-2 bg-slate-50 px-2 py-1.5 rounded border border-slate-200">
-                                <label className="text-xs text-slate-600 font-medium">Cevap:</label>
-                                <select 
-                                  className="bg-transparent flex-1 text-sm focus:outline-none font-semibold text-slate-700 cursor-pointer"
-                                  value={q.answer}
-                                  onChange={(e) => updateQuestionAnswer(q.id, e.target.value)}
-                                >
-                                  <option value="">-</option>
-                                  <option value="A">A</option>
-                                  <option value="B">B</option>
-                                  <option value="C">C</option>
-                                  <option value="D">D</option>
-                                  <option value="E">E</option>
-                                </select>
-                              </div>
-                            </div>
-                          )}
-                        </Draggable>
-                      ))
-                    )}
-                    {provided.placeholder}
+          <Droppable droppableId="all-questions">
+            {(provided, snapshot) => (
+              <div 
+                ref={provided.innerRef} 
+                {...provided.droppableProps} 
+                className={`flex flex-wrap gap-6 items-start w-full min-h-[200px] transition-colors rounded-xl p-4 ${snapshot.isDraggingOver ? 'bg-indigo-50/50' : ''}`}
+              >
+                {questions.length === 0 ? (
+                  <div className="text-center text-slate-400 py-12 w-full text-lg border-2 border-dashed border-slate-300 rounded-xl">
+                    PDF'den soru kırparak eklemeye başlayın.
                   </div>
+                ) : (
+                  questions.map((q, qIdx) => (
+                    <Draggable key={q.id} draggableId={q.id} index={qIdx}>
+                      {(provided, snapshot) => (
+                        <div 
+                          ref={provided.innerRef} 
+                          {...provided.draggableProps}
+                          {...provided.dragHandleProps}
+                          className={`bg-white border border-slate-200 rounded-lg p-3 flex flex-col w-[260px] cursor-grab active:cursor-grabbing transition-all group ${snapshot.isDragging ? 'shadow-2xl ring-4 ring-indigo-500/50 z-50 scale-105' : 'hover:shadow-md'}`}
+                        >
+                          <div className="flex justify-between items-center mb-2">
+                            <span className="font-bold text-slate-700">{qIdx + 1}. Soru</span>
+                            <button 
+                              onClick={() => removeQuestion(q.id)}
+                              className="text-slate-400 hover:text-red-500 p-1.5 hover:bg-red-50 rounded transition-colors"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                          
+                          <div className="flex-1 flex items-center justify-center bg-slate-50 border border-slate-100 rounded mb-3 overflow-hidden p-2">
+                            <img src={q.imageDataUrl} className="w-full h-auto max-h-40 object-contain" />
+                          </div>
+                          
+                          <div className="flex justify-center gap-1.5 mt-auto">
+                            {['A', 'B', 'C', 'D', 'E'].map(opt => (
+                              <button
+                                key={opt}
+                                onClick={() => updateQuestionAnswer(q.id, opt)}
+                                className={`w-8 h-8 rounded text-sm font-bold transition-colors ${q.answer === opt ? 'bg-yellow-400 text-slate-800 shadow-inner' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                              >
+                                {opt}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </Draggable>
+                  ))
                 )}
-              </Droppable>
-            </div>
-          ))}
-          </div>
+                {provided.placeholder}
+              </div>
+            )}
+          </Droppable>
         </DragDropContext>
       </div>
 
       {questions.length > 0 && (
-        <div className="p-4 border-t border-slate-200 bg-white shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.05)] z-10 shrink-0 flex flex-col sm:flex-row gap-4 items-center">
+        <div className="p-4 border-t border-slate-200 bg-white shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.05)] z-10 shrink-0 flex flex-col xl:flex-row gap-4 items-center">
+          <div className="flex w-full xl:w-auto gap-2">
+             <button 
+               onClick={() => setGlobalLayout('1-col')}
+               className={`flex-1 xl:flex-none px-3 py-2.5 rounded-lg text-sm font-bold transition-colors border ${globalLayout === '1-col' ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}`}
+               title="Tam Sayfa (Tek Sütun)"
+             >
+               Tek Sütun
+             </button>
+             <button 
+               onClick={() => setGlobalLayout('2-col')}
+               className={`flex-1 xl:flex-none px-3 py-2.5 rounded-lg text-sm font-bold transition-colors border ${globalLayout === '2-col' ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}`}
+               title="Yarım Sayfa (İki Sütun)"
+             >
+               İki Sütun
+             </button>
+          </div>
+          
+          <div className="flex w-full xl:w-auto gap-2">
+             <button 
+               onClick={() => setBookletFormat('A')}
+               className={`flex-1 xl:flex-none px-3 py-2.5 rounded-lg text-sm font-bold transition-colors border ${bookletFormat === 'A' ? 'bg-orange-50 border-orange-200 text-orange-700' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}`}
+             >
+               Tek Kitapçık
+             </button>
+             <button 
+               onClick={() => setBookletFormat('A-B')}
+               className={`flex-1 xl:flex-none px-3 py-2.5 rounded-lg text-sm font-bold transition-colors border ${bookletFormat === 'A-B' ? 'bg-orange-50 border-orange-200 text-orange-700' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}`}
+             >
+               A-B Grubu
+             </button>
+          </div>
+          
           <input 
             type="text" 
             value={testTitle}
             onChange={e => setTestTitle(e.target.value)}
-            className="w-full sm:w-1/2 md:w-1/3 border border-slate-300 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 focus:outline-none shadow-sm font-medium"
+            className="w-full md:flex-1 border border-slate-300 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 focus:outline-none shadow-sm font-medium"
             placeholder="Test Başlığı"
           />
           <div className="flex gap-3 w-full sm:w-auto ml-auto">
@@ -359,32 +367,6 @@ export const Sidebar: React.FC<{ onClose?: () => void }> = ({ onClose }) => {
               <Download className="w-4 h-4" />
               İndir
             </button>
-          </div>
-        </div>
-      )}
-
-      {/* Önizleme Modalı */}
-      {previewUrl && (
-        <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 sm:p-8">
-          <div className="bg-white w-full max-w-5xl h-full rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
-              <h3 className="font-bold text-slate-800 text-lg flex items-center gap-2">
-                <FileText className="w-5 h-5 text-indigo-600" />
-                {testTitle} - Önizleme
-              </h3>
-              <button 
-                onClick={() => setPreviewUrl(null)} 
-                className="p-2 hover:bg-slate-200 text-slate-500 hover:text-slate-700 rounded-full transition-colors"
-                title="Kapat"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <iframe 
-              src={previewUrl} 
-              className="w-full flex-1 border-0 bg-slate-100" 
-              title="PDF Önizleme" 
-            />
           </div>
         </div>
       )}
