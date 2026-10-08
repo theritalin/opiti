@@ -29,6 +29,7 @@ interface StoreState {
   addPdf: (pdf: PdfDocument) => void;
   setActivePdfId: (id: string | null) => void;
   setPreviewData: (data: { url: string; title: string; pages?: number; sizeBytes?: number } | null) => void;
+  addQuestion: (question: Question) => void;
   removeQuestion: (id: string) => void;
   updateQuestionAnswer: (id: string, answer: string) => void;
   reorderQuestions: (startIndex: number, endIndex: number) => void;

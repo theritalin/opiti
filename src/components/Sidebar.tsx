@@ -1,13 +1,12 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import { useStore } from '../store/useStore';
-import { Trash2, FileText, CheckCircle2, GripVertical, LayoutTemplate, Layout, Eye, Download, X, Columns } from 'lucide-react';
+import { Trash2, CheckCircle2, Eye, Download, X } from 'lucide-react';
 import jsPDF from 'jspdf';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 
 export const Sidebar: React.FC<{ onClose?: () => void }> = ({ onClose }) => {
   const { 
     questions,
-    pageLayouts,
     removeQuestion, 
     updateQuestionAnswer, 
     reorderQuestions,
@@ -213,7 +212,7 @@ export const Sidebar: React.FC<{ onClose?: () => void }> = ({ onClose }) => {
         setPreviewData({ 
            url: testBlobUrl, 
            title: testTitle,
-           pages: doc.internal.getNumberOfPages(),
+           pages: (doc.internal as any).getNumberOfPages(),
            sizeBytes: testBlob.size
         });
       } else {
